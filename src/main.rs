@@ -15,9 +15,9 @@ const MAP_SIDE_LENGTH_X: u32 = 4;
 const MAP_SIDE_LENGTH_Y: u32 = 4;
 
 const TILE_SIZE_HEX_ROW: TilemapTileSize = TilemapTileSize { x: 50.0, y: 58.0 };
-const TILE_SIZE_HEX_COL: TilemapTileSize = TilemapTileSize { x: 58.0, y: 50.0 };
+const _TILE_SIZE_HEX_COL: TilemapTileSize = TilemapTileSize { x: 58.0, y: 50.0 };
 const GRID_SIZE_HEX_ROW: TilemapGridSize = TilemapGridSize { x: 50.0, y: 58.0 };
-const GRID_SIZE_HEX_COL: TilemapGridSize = TilemapGridSize { x: 58.0, y: 50.0 };
+const _GRID_SIZE_HEX_COL: TilemapGridSize = TilemapGridSize { x: 58.0, y: 50.0 };
 
 #[derive(Deref, Resource)]
 pub struct TileHandleHexRow(Handle<Image>);
@@ -44,6 +44,30 @@ impl FromWorld for FontHandle {
         let asset_server = world.resource::<AssetServer>();
         Self(asset_server.load("fonts/FiraSans-Bold.ttf"))
     }
+}
+
+#[derive(Deref, Resource)]
+pub struct AxeHandle(Handle<Image>);
+impl FromWorld for AxeHandle {
+    fn from_world(world: &mut World) -> Self {
+        let asset_server = world.resource::<AssetServer>();
+        Self(asset_server.load("axe.png"))
+    }
+}
+
+// Add a single axe icon over the top of the tile at 0,0
+fn add_wood_cutter(mut commands: Commands,
+    _tilemap_q: Query<(&Transform, &TilemapType, &TilemapGridSize, &TileStorage)>,
+    _tile_q: Query<&mut TilePos>,
+    axe_handle: Res<AxeHandle>,
+) {
+    let scale = Vec3::new(0.7, 0.7, 1.0);
+    let translation =Vec3::new(0.0, 0.0, 1.1); 
+    commands.spawn((SpriteBundle{
+        texture: axe_handle.clone(),
+        transform: Transform {translation: translation, scale: scale, ..Default::default() },
+        ..Default::default()
+    }));
 }
 
 // Generates the initial tilemap, which is a hex grid.
@@ -119,120 +143,6 @@ fn spawn_tile_labels(
             commands
                 .entity(*tile_entity)
                 .insert(TileLabel(label_entity));
-        }
-    }
-}
-
-#[derive(Component)]
-pub struct MapTypeLabel;
-
-// Generates the map type label: e.g. `Square { diagonal_neighbors: false }`
-fn spawn_map_type_label(
-    mut commands: Commands,
-    font_handle: Res<FontHandle>,
-    windows: Res<Windows>,
-    map_type_q: Query<&TilemapType>,
-) {
-    let text_style = TextStyle {
-        font: font_handle.clone(),
-        font_size: 20.0,
-        color: Color::BLACK,
-    };
-    let text_alignment = TextAlignment::CENTER;
-
-    for window in windows.iter() {
-        for map_type in map_type_q.iter() {
-            // Place the map type label somewhere in the top left side of the screen
-            let transform = Transform {
-                translation: Vec2::new(-0.5 * window.width() / 2.0, 0.8 * window.height() / 2.0)
-                    .extend(1.0),
-                ..Default::default()
-            };
-            commands.spawn((
-                Text2dBundle {
-                    text: Text::from_section(format!("{map_type:?}"), text_style.clone())
-                        .with_alignment(text_alignment),
-                    transform,
-                    ..default()
-                },
-                MapTypeLabel,
-            ));
-        }
-    }
-}
-
-// Swaps the map type, when user presses SPACE
-#[allow(clippy::too_many_arguments)]
-fn swap_map_type(
-    mut tilemap_query: Query<(
-        &mut Transform,
-        &TilemapSize,
-        &mut TilemapType,
-        &mut TilemapGridSize,
-        &mut TilemapTexture,
-        &mut TilemapTileSize,
-    )>,
-    keyboard_input: Res<Input<KeyCode>>,
-    tile_label_q: Query<
-        (&TileLabel, &TilePos),
-        (With<TileLabel>, Without<MapTypeLabel>, Without<TilemapType>),
-    >,
-    mut map_type_label_q: Query<&mut Text, With<MapTypeLabel>>,
-    mut transform_q: Query<&mut Transform, Without<TilemapType>>,
-    tile_handle_hex_row: Res<TileHandleHexRow>,
-    tile_handle_hex_col: Res<TileHandleHexCol>,
-) {
-    if keyboard_input.just_pressed(KeyCode::Space) {
-        for (
-            mut map_transform,
-            map_size,
-            mut map_type,
-            mut grid_size,
-            mut map_texture,
-            mut tile_size,
-        ) in tilemap_query.iter_mut()
-        {
-            match map_type.as_ref() {
-                TilemapType::Hexagon(HexCoordSystem::Row) => {
-                    *map_type = TilemapType::Hexagon(HexCoordSystem::RowEven);
-                }
-                TilemapType::Hexagon(HexCoordSystem::RowEven) => {
-                    *map_type = TilemapType::Hexagon(HexCoordSystem::RowOdd);
-                }
-                TilemapType::Hexagon(HexCoordSystem::RowOdd) => {
-                    *map_type = TilemapType::Hexagon(HexCoordSystem::Column);
-                    *map_texture = TilemapTexture::Single((*tile_handle_hex_col).clone());
-                    *tile_size = TILE_SIZE_HEX_COL;
-                    *grid_size = GRID_SIZE_HEX_COL;
-                }
-                TilemapType::Hexagon(HexCoordSystem::Column) => {
-                    *map_type = TilemapType::Hexagon(HexCoordSystem::ColumnEven);
-                }
-                TilemapType::Hexagon(HexCoordSystem::ColumnEven) => {
-                    *map_type = TilemapType::Hexagon(HexCoordSystem::ColumnOdd);
-                }
-                TilemapType::Hexagon(HexCoordSystem::ColumnOdd) => {
-                    *map_type = TilemapType::Hexagon(HexCoordSystem::Row);
-                    *map_texture = TilemapTexture::Single((*tile_handle_hex_row).clone());
-                    *tile_size = TILE_SIZE_HEX_ROW;
-                    *grid_size = GRID_SIZE_HEX_ROW;
-                }
-                _ => unreachable!(),
-            }
-
-            *map_transform = get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0);
-
-            for (label, tile_pos) in tile_label_q.iter() {
-                if let Ok(mut tile_label_transform) = transform_q.get_mut(label.0) {
-                    let tile_center = tile_pos.center_in_world(&grid_size, &map_type).extend(1.0);
-                    *tile_label_transform =
-                        *map_transform * Transform::from_translation(tile_center);
-                }
-            }
-
-            for mut label_text in map_type_label_q.iter_mut() {
-                label_text.sections[0].value = format!("{:?}", map_type.as_ref());
-            }
         }
     }
 }
@@ -351,7 +261,7 @@ fn hover_highlight_tile_label(
 #[derive(Component)]
 struct NeighborHighlight;
 
-// Swaps the map type, when user presses SPACE
+// Highlight neigbours
 #[allow(clippy::too_many_arguments)]
 fn highlight_neighbor_label(
     mut commands: Commands,
@@ -466,13 +376,13 @@ fn main() {
         .init_resource::<TileHandleHexCol>()
         .init_resource::<TileHandleHexRow>()
         .init_resource::<FontHandle>()
+        .init_resource::<AxeHandle>()
         .add_startup_system(spawn_tilemap)
-        .add_startup_system_to_stage(StartupStage::PostStartup, spawn_tile_labels)
-        .add_startup_system_to_stage(StartupStage::PostStartup, spawn_map_type_label)
+        // .add_startup_system_to_stage(StartupStage::PostStartup, spawn_tile_labels)
+        .add_startup_system_to_stage(StartupStage::PostStartup, add_wood_cutter)
         .add_system_to_stage(CoreStage::First, camera_movement)
         .add_system_to_stage(CoreStage::First, update_cursor_pos.after(camera_movement))
-        .add_system(swap_map_type)
-        .add_system(hover_highlight_tile_label.after(swap_map_type))
-        .add_system(highlight_neighbor_label.after(hover_highlight_tile_label))
+        // .add_system(hover_highlight_tile_label)
+        // .add_system(highlight_neighbor_label.after(hover_highlight_tile_label))
         .run();
 }
