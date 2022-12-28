@@ -28,6 +28,7 @@ serde = "1.0.151"
 ldtk_rust = { version = "0.6" }
 serde_json = { version = "1.0" }
 tiled = { version = "0.9", default-features = false }
+bevy-inspector-egui = "0.15.0"
 
 [dev-dependencies]
 anyhow = { version = "1.0" }
