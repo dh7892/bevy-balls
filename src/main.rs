@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::helpers::hex_grid::neighbors::{HexDirection, HexNeighbors};
 use bevy_ecs_tilemap::prelude::*;
 mod helpers;
-use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable};
+use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
 
 // Press SPACE to change map type. Hover over a tile to highlight its label (red) and those of its
@@ -56,24 +56,69 @@ impl FromWorld for AxeHandle {
     }
 }
 
-// Add a single axe icon over the top of the tile at 0,0
-fn add_wood_cutter(
+// Given some map data and a position in 3d,
+// Return the (TilePos, Transform) of the tile that is near that point
+// Or None if there is no tile under the point of interest
+fn tile_pos_from_cursor(
+    map_size: &TilemapSize,
+    grid_size: &TilemapGridSize,
+    map_type: &TilemapType,
+    map_transform: &Transform,
+    cursor_pos: Vec3,
+) -> Option<(TilePos, Transform)> {
+    // We need to make sure that the cursor's world position is correct relative to the map
+    // due to any map transformation.
+    let cursor_in_map_pos: Vec2 = {
+        // Extend the cursor_pos vec3 by 1.0
+        let cursor_pos = Vec4::from((cursor_pos, 1.0));
+        let cursor_in_map_pos = map_transform.compute_matrix().inverse() * cursor_pos;
+        cursor_in_map_pos.xy()
+    };
+    // Once we have a world position we can transform it into a possible tile position.
+    if let Some(tile_pos) =
+        TilePos::from_world_pos(&cursor_in_map_pos, map_size, grid_size, map_type)
+    {
+        let tile_center = tile_pos.center_in_world(grid_size, map_type).extend(1.0);
+        let tile_world_location = *map_transform * Transform::from_translation(tile_center);
+        return Some((tile_pos, tile_world_location));
+    }
+
+    None
+}
+
+#[derive(Component)]
+pub struct WoodCutter {
+    pos: TilePos,
+}
+
+fn add_wood_cutter_to_tile(
     mut commands: Commands,
-    _tilemap_q: Query<(&Transform, &TilemapType, &TilemapGridSize, &TileStorage)>,
-    _tile_q: Query<&mut TilePos>,
+    meshes_q: Query<
+        (&TilemapSize, &TilemapGridSize, &TilemapType, &Transform),
+        (Without<HoverCursor>,),
+    >,
     axe_handle: Res<AxeHandle>,
+    cursor_pos: Res<CursorPos>,
+    buttons: Res<Input<MouseButton>>,
 ) {
-    let scale = Vec3::new(0.7, 0.7, 1.0);
-    let translation = Vec3::new(0.0, 0.0, 1.1);
-    commands.spawn(SpriteBundle {
-        texture: axe_handle.clone(),
-        transform: Transform {
-            translation: translation,
-            scale: scale,
-            ..Default::default()
-        },
-        ..Default::default()
-    });
+    if buttons.just_pressed(MouseButton::Left) {
+        if let Ok((map_size, grid_size, map_type, map_transform)) = meshes_q.get_single() {
+            if let Some((tile_pos, tile_centre)) =
+                tile_pos_from_cursor(map_size, grid_size, map_type, map_transform, cursor_pos.0)
+            {
+                let mut transform = tile_centre;
+                transform.translation.z += 0.1;
+                commands.spawn((
+                    WoodCutter { pos: tile_pos },
+                    SpriteBundle {
+                        texture: axe_handle.clone(),
+                        transform: transform,
+                        ..Default::default()
+                    },
+                ));
+            }
+        }
+    }
 }
 
 // Generates the initial tilemap, which is a hex grid.
@@ -111,46 +156,6 @@ fn spawn_tilemap(mut commands: Commands, tile_handle_hex: Res<TileHandleHex>) {
         transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
         ..Default::default()
     });
-}
-
-#[derive(Component)]
-struct TileLabel(Entity);
-
-// Generates tile position labels of the form: `(tile_pos.x, tile_pos.y)`
-fn spawn_tile_labels(
-    mut commands: Commands,
-    tilemap_q: Query<(&Transform, &TilemapType, &TilemapGridSize, &TileStorage)>,
-    tile_q: Query<&mut TilePos>,
-    font_handle: Res<FontHandle>,
-) {
-    let text_style = TextStyle {
-        font: font_handle.clone(),
-        font_size: 20.0,
-        color: Color::BLACK,
-    };
-    let text_alignment = TextAlignment::CENTER;
-    for (map_transform, map_type, grid_size, tilemap_storage) in tilemap_q.iter() {
-        for tile_entity in tilemap_storage.iter().flatten() {
-            let tile_pos = tile_q.get(*tile_entity).unwrap();
-            let tile_center = tile_pos.center_in_world(grid_size, map_type).extend(1.0);
-            let transform = *map_transform * Transform::from_translation(tile_center);
-
-            let label_entity = commands
-                .spawn(Text2dBundle {
-                    text: Text::from_section(
-                        format!("{}, {}", tile_pos.x, tile_pos.y),
-                        text_style.clone(),
-                    )
-                    .with_alignment(text_alignment),
-                    transform,
-                    ..default()
-                })
-                .id();
-            commands
-                .entity(*tile_entity)
-                .insert(TileLabel(label_entity));
-        }
-    }
 }
 
 #[derive(Component)]
@@ -226,6 +231,7 @@ pub fn update_cursor_pos(
     }
 }
 
+
 // This is where we check which tile the cursor is hovered over.
 // We need:
 // timemap
@@ -234,198 +240,31 @@ pub fn update_cursor_pos(
 fn update_hover_cursor(
     cursor_pos: Res<CursorPos>,
     tilemap_q: Query<
-        (
-            &TilemapSize,
-            &TilemapGridSize,
-            &TilemapType,
-            &TileStorage,
-            &Transform,
-        ),
+        (&TilemapSize, &TilemapGridSize, &TilemapType, &Transform),
         (Without<HoverCursor>,),
     >,
     mut hover_cursor_q: Query<(&mut HoverCursor, &mut Visibility, &mut Transform)>,
-    tile_pos_q: Query<&TilePos>,
 ) {
-    for (map_size, grid_size, map_type, tile_storage, map_transform) in tilemap_q.iter() {
-        // Grab the cursor position from the `Res<CursorPos>`
-        let cursor_pos: Vec3 = cursor_pos.0;
-        // We need to make sure that the cursor's world position is correct relative to the map
-        // due to any map transformation.
-        let cursor_in_map_pos: Vec2 = {
-            // Extend the cursor_pos vec3 by 1.0
-            let cursor_pos = Vec4::from((cursor_pos, 1.0));
-            let cursor_in_map_pos = map_transform.compute_matrix().inverse() * cursor_pos;
-            cursor_in_map_pos.xy()
-        };
-        // Once we have a world position we can transform it into a possible tile position.
-        if let Some(tile_pos) =
-            TilePos::from_world_pos(&cursor_in_map_pos, map_size, grid_size, map_type)
+    for (map_size, grid_size, map_type, map_transform) in tilemap_q.iter() {
+        if let Some((tile_pos, tile_centre)) =
+            tile_pos_from_cursor(map_size, grid_size, map_type, map_transform, cursor_pos.0)
         {
-            if let Some(tile_entity) = tile_storage.get(&tile_pos) {
-                for (mut hc, mut vis, mut trans) in hover_cursor_q.iter_mut() {
-                    // The mouse cursor is over a tile, so we need to set the hover_cursor
-                    // position and make the sprite visible
-                    let tile_pos = tile_pos_q.get(tile_entity).unwrap();
-                    let tile_center = tile_pos.center_in_world(grid_size, map_type).extend(1.1);
-                    let hover_location = *map_transform * Transform::from_translation(tile_center);
-                    trans.translation = hover_location.translation;
-                    vis.is_visible = true;
-                    // Update the cursor's knowledge of the tile it's highlighting
-                    hc.tile_pos = Some(*tile_pos);
+            for (mut hc, mut vis, mut trans) in hover_cursor_q.iter_mut() {
+                // The mouse cursor is over a tile, so we need to set the hover_cursor
+                // position and make the sprite visible
+                trans.translation = tile_centre.translation;
+                // Increase z a little so it's in top of the tile
+                trans.translation.z += 0.1;
 
-                }
+                vis.is_visible = true;
+                // Update the cursor's knowledge of the tile it's highlighting
+                hc.tile_pos = Some(tile_pos);
             }
         } else {
             // The cursor has moved off the tiles so hide the cursor
             for (mut hc, mut vis, _) in hover_cursor_q.iter_mut() {
                 vis.is_visible = false;
-                    hc.tile_pos = None;
-            }
-        }
-    }
-}
-
-fn hover_highlight(
-    mut commands: Commands,
-    cursor_pos: Res<CursorPos>,
-    tilemap_q: Query<(
-        &TilemapSize,
-        &TilemapGridSize,
-        &TilemapType,
-        &TileStorage,
-        &Transform,
-    )>,
-    hovered_tiles_q: Query<&TilePos, With<Hovered>>,
-    hex_tile_hover: Res<TileHandleHexHover>,
-) {
-    for (map_size, grid_size, map_type, tile_storage, map_transform) in tilemap_q.iter() {
-        // Grab the cursor position from the `Res<CursorPos>`
-        let cursor_pos: Vec3 = cursor_pos.0;
-        // We need to make sure that the cursor's world position is correct relative to the map
-        // due to any map transformation.
-        let cursor_in_map_pos: Vec2 = {
-            // Extend the cursor_pos vec3 by 1.0
-            let cursor_pos = Vec4::from((cursor_pos, 1.0));
-            let cursor_in_map_pos = map_transform.compute_matrix().inverse() * cursor_pos;
-            cursor_in_map_pos.xy()
-        };
-        // Once we have a world position we can transform it into a possible tile position.
-        if let Some(tile_pos) =
-            TilePos::from_world_pos(&cursor_in_map_pos, map_size, grid_size, map_type)
-        {
-            // Highlight the relevant tile's label
-            // if let Some(tile_entity) = tile_storage.get(&tile_pos) {
-            //     let tile_pos = tile_q.get(tile_entity).unwrap();
-            //     let tile_center = tile_pos.center_in_world(grid_size, map_type).extend(1.1);
-            //     let hover_location = *map_transform * Transform::from_translation(tile_center);
-
-            //     commands.entity(tile_entity).insert(Hovered);
-
-            //     let hover_cursor = commands.spawn(SpriteBundle{
-            //         texture: hex_tile_hover.clone(),
-            //         transform: hover_location,
-            //         ..Default::default()
-            //     }).id();
-            //     commands.entity(tile_entity).push_children(&[hover_cursor]);
-
-            // }
-        }
-    }
-}
-
-#[derive(Component)]
-struct NeighborHighlight;
-
-// Highlight neigbours
-#[allow(clippy::too_many_arguments)]
-fn highlight_neighbor_label(
-    mut commands: Commands,
-    tilemap_query: Query<(&TilemapType, &TilemapSize, &TileStorage)>,
-    keyboard_input: Res<Input<KeyCode>>,
-    highlighted_tiles_q: Query<Entity, With<NeighborHighlight>>,
-    hovered_tiles_q: Query<&TilePos, With<Hovered>>,
-    tile_label_q: Query<&TileLabel>,
-    mut text_q: Query<&mut Text>,
-) {
-    // Un-highlight any previously highlighted tile labels.
-    for highlighted_tile_entity in highlighted_tiles_q.iter() {
-        if let Ok(label) = tile_label_q.get(highlighted_tile_entity) {
-            if let Ok(mut tile_text) = text_q.get_mut(label.0) {
-                for mut section in tile_text.sections.iter_mut() {
-                    section.style.color = Color::BLACK;
-                }
-                commands
-                    .entity(highlighted_tile_entity)
-                    .remove::<NeighborHighlight>();
-            }
-        }
-    }
-
-    for (map_type, map_size, tile_storage) in tilemap_query.iter() {
-        let hex_coord_sys = if let TilemapType::Hexagon(hex_coord_sys) = map_type {
-            hex_coord_sys
-        } else {
-            continue;
-        };
-
-        for hovered_tile_pos in hovered_tiles_q.iter() {
-            let neighboring_positions =
-                HexNeighbors::get_neighboring_positions(hovered_tile_pos, map_size, hex_coord_sys);
-
-            for neighbor_pos in neighboring_positions.iter() {
-                // We want to ensure that the tile position lies within the tile map, so we do a
-                // `checked_get`.
-                if let Some(tile_entity) = tile_storage.checked_get(neighbor_pos) {
-                    if let Ok(label) = tile_label_q.get(tile_entity) {
-                        if let Ok(mut tile_text) = text_q.get_mut(label.0) {
-                            for mut section in tile_text.sections.iter_mut() {
-                                section.style.color = Color::BLUE;
-                            }
-                            commands.entity(tile_entity).insert(NeighborHighlight);
-                        }
-                    }
-                }
-            }
-
-            let selected_hex_direction = if keyboard_input.pressed(KeyCode::Key0) {
-                Some(HexDirection::Zero)
-            } else if keyboard_input.pressed(KeyCode::Key1) {
-                Some(HexDirection::One)
-            } else if keyboard_input.pressed(KeyCode::Key2) {
-                Some(HexDirection::Two)
-            } else if keyboard_input.pressed(KeyCode::Key3) {
-                Some(HexDirection::Three)
-            } else if keyboard_input.pressed(KeyCode::Key4) {
-                Some(HexDirection::Four)
-            } else if keyboard_input.pressed(KeyCode::Key5) {
-                Some(HexDirection::Five)
-            } else {
-                None
-            };
-
-            if let Some(hex_direction) = selected_hex_direction {
-                let tile_pos = match map_type {
-                    TilemapType::Hexagon(hex_coord_sys) => {
-                        // Get the neighbor in a particular direction.
-                        // This function does not check to see if the calculated neighbor lies
-                        // within the tile map.
-                        hex_direction.offset(hovered_tile_pos, *hex_coord_sys)
-                    }
-                    _ => unreachable!(),
-                };
-
-                // We want to ensure that the tile position lies within the tile map, so we do a
-                // `checked_get`.
-                if let Some(tile_entity) = tile_storage.checked_get(&tile_pos) {
-                    if let Ok(label) = tile_label_q.get(tile_entity) {
-                        if let Ok(mut tile_text) = text_q.get_mut(label.0) {
-                            for mut section in tile_text.sections.iter_mut() {
-                                section.style.color = Color::GREEN;
-                            }
-                            commands.entity(tile_entity).insert(NeighborHighlight);
-                        }
-                    }
-                }
+                hc.tile_pos = None;
             }
         }
     }
@@ -454,12 +293,10 @@ fn main() {
         .init_resource::<FontHandle>()
         .init_resource::<AxeHandle>()
         .add_startup_system(spawn_tilemap)
-        // .add_startup_system_to_stage(StartupStage::PostStartup, spawn_tile_labels)
-        .add_startup_system_to_stage(StartupStage::PostStartup, add_wood_cutter)
         .add_startup_system_to_stage(StartupStage::PostStartup, add_hover_cursor)
         .add_system_to_stage(CoreStage::First, camera_movement)
         .add_system_to_stage(CoreStage::First, update_cursor_pos.after(camera_movement))
-        .add_system(hover_highlight)
+        .add_system(add_wood_cutter_to_tile)
         .add_system(update_hover_cursor)
         .run();
 }
