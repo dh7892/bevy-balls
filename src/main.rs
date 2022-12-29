@@ -1,9 +1,8 @@
 use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
-use bevy_ecs_tilemap::helpers::hex_grid::neighbors::{HexDirection, HexNeighbors};
 use bevy_ecs_tilemap::prelude::*;
 mod helpers;
-use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
+use bevy_inspector_egui::{Inspectable, RegisterInspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
 
 // Press SPACE to change map type. Hover over a tile to highlight its label (red) and those of its
@@ -86,6 +85,9 @@ fn tile_pos_from_cursor(
     None
 }
 
+#[derive(Component, Inspectable)]
+pub struct Building;
+
 #[derive(Component)]
 pub struct WoodCutter {
     pos: TilePos,
@@ -97,6 +99,7 @@ fn add_wood_cutter_to_tile(
         (&TilemapSize, &TilemapGridSize, &TilemapType, &Transform),
         (Without<HoverCursor>,),
     >,
+    cutters_q: Query<&WoodCutter>,
     axe_handle: Res<AxeHandle>,
     cursor_pos: Res<CursorPos>,
     buttons: Res<Input<MouseButton>>,
@@ -106,16 +109,18 @@ fn add_wood_cutter_to_tile(
             if let Some((tile_pos, tile_centre)) =
                 tile_pos_from_cursor(map_size, grid_size, map_type, map_transform, cursor_pos.0)
             {
-                let mut transform = tile_centre;
-                transform.translation.z += 0.1;
-                commands.spawn((
-                    WoodCutter { pos: tile_pos },
-                    SpriteBundle {
-                        texture: axe_handle.clone(),
-                        transform: transform,
-                        ..Default::default()
-                    },
-                ));
+                if !cutters_q.iter().any(|item| item.pos == tile_pos) {
+                    let mut transform = tile_centre;
+                    transform.translation.z += 0.1;
+                    commands.spawn((
+                        WoodCutter { pos: tile_pos },
+                        SpriteBundle {
+                            texture: axe_handle.clone(),
+                            transform: transform,
+                            ..Default::default()
+                        },
+                    ));
+                }
             }
         }
     }
@@ -230,7 +235,6 @@ pub fn update_cursor_pos(
         }
     }
 }
-
 
 // This is where we check which tile the cursor is hovered over.
 // We need:
