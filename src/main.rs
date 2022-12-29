@@ -112,6 +112,7 @@ fn add_wood_cutter_to_tile(
                 if !cutters_q.iter().any(|item| item.pos == tile_pos) {
                     let mut transform = tile_centre;
                     transform.translation.z += 0.1;
+                    transform.scale = Vec3::new(0.8, 0.8, 0.8);
                     commands.spawn((
                         WoodCutter { pos: tile_pos },
                         SpriteBundle {
