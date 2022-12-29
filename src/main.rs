@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_ecs_tilemap::helpers::hex_grid::neighbors::{HexDirection, HexNeighbors};
 use bevy_ecs_tilemap::prelude::*;
 mod helpers;
-use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable};
 use helpers::camera::movement as camera_movement;
 
 // Press SPACE to change map type. Hover over a tile to highlight its label (red) and those of its
@@ -232,7 +232,6 @@ pub fn update_cursor_pos(
 // cursor_pos so we know what the mouse is pointing to
 // current highlighted tile
 fn update_hover_cursor(
-    mut commands: Commands,
     cursor_pos: Res<CursorPos>,
     tilemap_q: Query<
         (
@@ -244,7 +243,7 @@ fn update_hover_cursor(
         ),
         (Without<HoverCursor>,),
     >,
-    mut hover_cursor_q: Query<(Entity, &mut HoverCursor, &mut Visibility, &mut Transform)>,
+    mut hover_cursor_q: Query<(&mut HoverCursor, &mut Visibility, &mut Transform)>,
     tile_pos_q: Query<&TilePos>,
 ) {
     for (map_size, grid_size, map_type, tile_storage, map_transform) in tilemap_q.iter() {
@@ -263,7 +262,7 @@ fn update_hover_cursor(
             TilePos::from_world_pos(&cursor_in_map_pos, map_size, grid_size, map_type)
         {
             if let Some(tile_entity) = tile_storage.get(&tile_pos) {
-                for (_, hc, mut vis, mut trans) in hover_cursor_q.iter_mut() {
+                for (mut hc, mut vis, mut trans) in hover_cursor_q.iter_mut() {
                     // The mouse cursor is over a tile, so we need to set the hover_cursor
                     // position and make the sprite visible
                     let tile_pos = tile_pos_q.get(tile_entity).unwrap();
@@ -271,13 +270,17 @@ fn update_hover_cursor(
                     let hover_location = *map_transform * Transform::from_translation(tile_center);
                     trans.translation = hover_location.translation;
                     vis.is_visible = true;
+                    // Update the cursor's knowledge of the tile it's highlighting
+                    hc.tile_pos = Some(*tile_pos);
+
                 }
             }
         } else {
             // The cursor has moved off the tiles so hide the cursor
-            // for (_, hc, mut vis, mut trans) in hover_cursor_q.iter_mut() {
-            //     vis.is_visible = false;
-            // }
+            for (mut hc, mut vis, _) in hover_cursor_q.iter_mut() {
+                vis.is_visible = false;
+                    hc.tile_pos = None;
+            }
         }
     }
 }
