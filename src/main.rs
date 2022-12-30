@@ -2,8 +2,11 @@ use bevy::math::Vec4Swizzles;
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 mod helpers;
-use bevy_inspector_egui::{Inspectable, RegisterInspectable, WorldInspectorPlugin};
+use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
+
+mod map;
+use map::map::{create_map, TileHandleHex};
 
 // Press SPACE to change map type. Hover over a tile to highlight its label (red) and those of its
 // neighbors (blue). Press and hold one of keys 0-5 to mark the neighbor in that direction (green).
@@ -17,15 +20,15 @@ const MAP_SIDE_LENGTH_Y: u32 = 4;
 const TILE_SIZE_HEX_ROW: TilemapTileSize = TilemapTileSize { x: 50.0, y: 58.0 };
 const GRID_SIZE_HEX_ROW: TilemapGridSize = TilemapGridSize { x: 50.0, y: 58.0 };
 
-#[derive(Deref, Resource)]
-pub struct TileHandleHex(Handle<Image>);
+// #[derive(Deref, Resource)]
+// pub struct TileHandleHex(Handle<Image>);
 
-impl FromWorld for TileHandleHex {
-    fn from_world(world: &mut World) -> Self {
-        let asset_server = world.resource::<AssetServer>();
-        Self(asset_server.load("hex.png"))
-    }
-}
+// impl FromWorld for TileHandleHex {
+//     fn from_world(world: &mut World) -> Self {
+//         let asset_server = world.resource::<AssetServer>();
+//         Self(asset_server.load("hex.png"))
+//     }
+// }
 
 #[derive(Deref, Resource)]
 pub struct FontHandle(Handle<Font>);
@@ -105,6 +108,7 @@ fn add_wood_cutter_to_tile(
     buttons: Res<Input<MouseButton>>,
 ) {
     if buttons.just_pressed(MouseButton::Left) {
+        // Left click adds wood cutter
         if let Ok((map_size, grid_size, map_type, map_transform)) = meshes_q.get_single() {
             if let Some((tile_pos, tile_centre)) =
                 tile_pos_from_cursor(map_size, grid_size, map_type, map_transform, cursor_pos.0)
@@ -128,22 +132,27 @@ fn add_wood_cutter_to_tile(
 }
 
 fn setup_menu(mut commands: Commands, axe_handle: Res<AxeHandle>) {
-    commands.spawn(ButtonBundle{
-        style: Style {
-            align_self: AlignSelf::Center,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            size: Size::new(Val::Percent(20.0), Val::Percent(10.0)),
+    commands
+        .spawn(ButtonBundle {
+            style: Style {
+                align_self: AlignSelf::Center,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                size: Size::new(Val::Percent(20.0), Val::Percent(10.0)),
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    }).with_children(|parent| {
-        parent.spawn( ImageBundle { 
-            style: Style { size: Size::new(Val::Px(50.0), Val::Auto), ..default()},
-            image: axe_handle.clone().into(),
-            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn(ImageBundle {
+                style: Style {
+                    size: Size::new(Val::Px(50.0), Val::Auto),
+                    ..default()
+                },
+                image: axe_handle.clone().into(),
+                ..default()
+            });
         });
-    });
 }
 
 // Generates the initial tilemap, which is a hex grid.
@@ -316,12 +325,13 @@ fn main() {
         .init_resource::<TileHandleHex>()
         .init_resource::<FontHandle>()
         .init_resource::<AxeHandle>()
+        .add_startup_system(create_map)
         .add_startup_system(spawn_tilemap)
-        .add_startup_system(setup_menu)
-        .add_startup_system_to_stage(StartupStage::PostStartup, add_hover_cursor)
+        // .add_startup_system(setup_menu)
+        // .add_startup_system_to_stage(StartupStage::PostStartup, add_hover_cursor)
         .add_system_to_stage(CoreStage::First, camera_movement)
-        .add_system_to_stage(CoreStage::First, update_cursor_pos.after(camera_movement))
-        .add_system(add_wood_cutter_to_tile)
-        .add_system(update_hover_cursor)
+        // .add_system_to_stage(CoreStage::First, update_cursor_pos.after(camera_movement))
+        // .add_system(add_wood_cutter_to_tile)
+        // .add_system(update_hover_cursor)
         .run();
 }
