@@ -127,6 +127,25 @@ fn add_wood_cutter_to_tile(
     }
 }
 
+fn setup_menu(mut commands: Commands, axe_handle: Res<AxeHandle>) {
+    commands.spawn(ButtonBundle{
+        style: Style {
+            align_self: AlignSelf::Center,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            size: Size::new(Val::Percent(20.0), Val::Percent(10.0)),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).with_children(|parent| {
+        parent.spawn( ImageBundle { 
+            style: Style { size: Size::new(Val::Px(50.0), Val::Auto), ..default()},
+            image: axe_handle.clone().into(),
+            ..default()
+        });
+    });
+}
+
 // Generates the initial tilemap, which is a hex grid.
 fn spawn_tilemap(mut commands: Commands, tile_handle_hex: Res<TileHandleHex>) {
     commands.spawn(Camera2dBundle::default());
@@ -298,6 +317,7 @@ fn main() {
         .init_resource::<FontHandle>()
         .init_resource::<AxeHandle>()
         .add_startup_system(spawn_tilemap)
+        .add_startup_system(setup_menu)
         .add_startup_system_to_stage(StartupStage::PostStartup, add_hover_cursor)
         .add_system_to_stage(CoreStage::First, camera_movement)
         .add_system_to_stage(CoreStage::First, update_cursor_pos.after(camera_movement))
