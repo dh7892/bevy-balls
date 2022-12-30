@@ -303,6 +303,10 @@ fn update_hover_cursor(
     }
 }
 
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2dBundle::default());
+}
+
 fn main() {
     App::new()
         .add_plugins(
@@ -325,8 +329,9 @@ fn main() {
         .init_resource::<TileHandleHex>()
         .init_resource::<FontHandle>()
         .init_resource::<AxeHandle>()
+        .add_startup_system(setup_camera)
         .add_startup_system(create_map)
-        .add_startup_system(spawn_tilemap)
+        // .add_startup_system(spawn_tilemap)
         // .add_startup_system(setup_menu)
         // .add_startup_system_to_stage(StartupStage::PostStartup, add_hover_cursor)
         .add_system_to_stage(CoreStage::First, camera_movement)
