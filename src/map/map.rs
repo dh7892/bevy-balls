@@ -35,7 +35,6 @@ pub struct TileIndex {
     row: usize,
     col: usize,
 }
-
 #[derive(Resource)]
 pub struct TileMap {
     rows: usize,

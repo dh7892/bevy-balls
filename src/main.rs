@@ -4,7 +4,9 @@ use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
 
 mod map;
-use map::map::{create_map, hover_on_tile, TileHandleHex, TileHandleHexHover};
+use map::map::{
+    create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover, TileMap,
+};
 
 #[derive(Deref, Resource)]
 pub struct FontHandle(Handle<Font>);
@@ -27,45 +29,47 @@ impl FromWorld for AxeHandle {
 #[derive(Component, Inspectable)]
 pub struct Building;
 
-// #[derive(Component)]
-// pub struct WoodCutter {
-//     pos: TilePos,
-// }
+#[derive(Component)]
+pub struct WoodCutter;
 
-// fn add_wood_cutter_to_tile(
-//     mut commands: Commands,
-//     meshes_q: Query<
-//         (&TilemapSize, &TilemapGridSize, &TilemapType, &Transform),
-//         (Without<HoverCursor>,),
-//     >,
-//     cutters_q: Query<&WoodCutter>,
-//     axe_handle: Res<AxeHandle>,
-//     cursor_pos: Res<CursorPos>,
-//     buttons: Res<Input<MouseButton>>,
-// ) {
-//     if buttons.just_pressed(MouseButton::Left) {
-//         // Left click adds wood cutter
-//         if let Ok((map_size, grid_size, map_type, map_transform)) = meshes_q.get_single() {
-//             if let Some((tile_pos, tile_centre)) =
-//                 tile_pos_from_cursor(map_size, grid_size, map_type, map_transform, cursor_pos.0)
-//             {
-//                 if !cutters_q.iter().any(|item| item.pos == tile_pos) {
-//                     let mut transform = tile_centre;
-//                     transform.translation.z += 0.1;
-//                     transform.scale = Vec3::new(0.8, 0.8, 0.8);
-//                     commands.spawn((
-//                         WoodCutter { pos: tile_pos },
-//                         SpriteBundle {
-//                             texture: axe_handle.clone(),
-//                             transform: transform,
-//                             ..Default::default()
-//                         },
-//                     ));
-//                 }
-//             }
-//         }
-//     }
-// }
+fn add_wood_cutter_on_click(
+    mut commands: Commands,
+    tile_q: Query<(Entity, Option<&Children>), (With<HoveredTile>,)>,
+    axe_handle: Res<AxeHandle>,
+    buttons: Res<Input<MouseButton>>,
+) {
+    if buttons.just_pressed(MouseButton::Left) {
+        if let Some((tile, children)) = tile_q.iter().last() {
+            match children {
+                None => {
+                    // Only build is there isn't already anythign built here.
+                    // Might need a more better test later than just looking at children
+                    // might need to look specifically for buildings that are children
+
+                    // The transform is relative to the parent so we just add a small amount to z
+                    // So the building appears on top
+                    let mut transform = Transform { ..Default::default() };
+                    transform.translation.z += 0.1;
+                    // And scale it down a little to fit in the hex
+                    transform.scale = Vec3::new(0.8, 0.8, 0.8);
+                    let wood_cutter_id = commands
+                        .spawn((
+                            WoodCutter,
+                            SpriteBundle {
+                                texture: axe_handle.clone(),
+                                transform: transform,
+                                ..Default::default()
+                            },
+                        ))
+                        .id();
+                    commands.entity(tile).add_child(wood_cutter_id);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 
 fn setup_menu(mut commands: Commands, axe_handle: Res<AxeHandle>) {
     commands
@@ -117,7 +121,7 @@ fn main() {
         .add_startup_system(create_map)
         .add_startup_system(setup_menu)
         .add_system_to_stage(CoreStage::First, camera_movement)
-        // .add_system(add_wood_cutter_to_tile)
+        .add_system(add_wood_cutter_on_click)
         .add_system(hover_on_tile)
         .run();
 }
