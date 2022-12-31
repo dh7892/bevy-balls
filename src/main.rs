@@ -6,7 +6,7 @@ use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
 
 mod map;
-use map::map::{create_map, TileHandleHex};
+use map::map::{create_map, TileHandleHex, hover_on_tile, TileHandleHexHover};
 
 // Press SPACE to change map type. Hover over a tile to highlight its label (red) and those of its
 // neighbors (blue). Press and hold one of keys 0-5 to mark the neighbor in that direction (green).
@@ -36,16 +36,6 @@ impl FromWorld for FontHandle {
     fn from_world(world: &mut World) -> Self {
         let asset_server = world.resource::<AssetServer>();
         Self(asset_server.load("fonts/FiraSans-Bold.ttf"))
-    }
-}
-
-#[derive(Deref, Resource)]
-pub struct TileHandleHexHover(Handle<Image>);
-
-impl FromWorld for TileHandleHexHover {
-    fn from_world(world: &mut World) -> Self {
-        let asset_server = world.resource::<AssetServer>();
-        Self(asset_server.load("hex-hovered.png"))
     }
 }
 
@@ -338,5 +328,6 @@ fn main() {
         // .add_system_to_stage(CoreStage::First, update_cursor_pos.after(camera_movement))
         // .add_system(add_wood_cutter_to_tile)
         // .add_system(update_hover_cursor)
+        .add_system(hover_on_tile)
         .run();
 }
