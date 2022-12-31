@@ -5,7 +5,6 @@
 use bevy::{math::Vec3Swizzles, prelude::*};
 use itertools::Itertools;
 use std::collections::HashMap;
-use tiled::Tile;
 
 #[derive(Deref, Resource)]
 pub struct TileHandleHex(Handle<Image>);
@@ -162,7 +161,7 @@ pub struct HoveredTile;
 pub fn hover_on_tile(
     mut commands: Commands,
     mut all_tiles_q: Query<&mut Sprite, (With<IsTile>,)>,
-    mut hovered_tiles_q: Query<(Entity), (With<HoveredTile>,)>,
+    mut hovered_tiles_q: Query<Entity, (With<HoveredTile>,)>,
     windows: Res<Windows>,
     cam_q: Query<(&Transform, &Camera)>,
     mut cursor_moved_events: EventReader<CursorMoved>,
@@ -171,7 +170,7 @@ pub fn hover_on_tile(
     // If we have multiple movements, we only care about the last one
     if let Some(cursor_moved) = cursor_moved_events.iter().last() {
         // First, remove hovered status from any tiles that have that status. 
-        for (entity) in hovered_tiles_q.iter_mut() {
+        for entity in hovered_tiles_q.iter_mut() {
             commands.entity(entity).remove::<HoveredTile>();
             if let Ok(mut sprite) = all_tiles_q.get_mut(entity){
                 sprite.color = Color::WHITE;

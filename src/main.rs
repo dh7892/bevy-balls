@@ -5,7 +5,7 @@ use helpers::camera::movement as camera_movement;
 
 mod map;
 use map::map::{
-    create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover, TileMap,
+    create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover,
 };
 
 #[derive(Deref, Resource)]
@@ -35,6 +35,7 @@ pub struct WoodCutter;
 fn add_wood_cutter_on_click(
     mut commands: Commands,
     tile_q: Query<(Entity, Option<&Children>), (With<HoveredTile>,)>,
+    existing_wood_cutters_q: Query<Entity, (With<WoodCutter>,)>,
     axe_handle: Res<AxeHandle>,
     buttons: Res<Input<MouseButton>>,
 ) {
@@ -42,13 +43,15 @@ fn add_wood_cutter_on_click(
         if let Some((tile, children)) = tile_q.iter().last() {
             match children {
                 None => {
-                    // Only build is there isn't already anythign built here.
+                    // Only build if there isn't already anythign built here.
                     // Might need a more better test later than just looking at children
                     // might need to look specifically for buildings that are children
 
                     // The transform is relative to the parent so we just add a small amount to z
                     // So the building appears on top
-                    let mut transform = Transform { ..Default::default() };
+                    let mut transform = Transform {
+                        ..Default::default()
+                    };
                     transform.translation.z += 0.1;
                     // And scale it down a little to fit in the hex
                     transform.scale = Vec3::new(0.8, 0.8, 0.8);
@@ -68,8 +71,24 @@ fn add_wood_cutter_on_click(
             }
         }
     }
+    if buttons.just_pressed(MouseButton::Right) {
+        // Right mouse will destroy the wood cutter
+        if let Some((tile, children)) = tile_q.iter().last() {
+            if let Some(children) = children {
+                for &possible_wood_cutter in children.iter() {
+                    if let Ok(_) = existing_wood_cutters_q.get(possible_wood_cutter) {
+                        // The child is in our list of existing wood cutters so we want to
+                        // despawn it
+                        commands
+                            .entity(tile)
+                            .remove_children(&[possible_wood_cutter]);
+                        commands.entity(possible_wood_cutter).despawn();
+                    }
+                }
+            }
+        }
+    }
 }
-
 
 fn setup_menu(mut commands: Commands, axe_handle: Res<AxeHandle>) {
     commands
