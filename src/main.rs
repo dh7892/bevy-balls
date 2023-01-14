@@ -118,7 +118,7 @@ fn add_wood_cutter_on_click(
                     },
                     SpriteBundle {
                         texture: axe_handle.clone(),
-                        transform: transform,
+                        transform,
                         ..Default::default()
                     },
                 ))
@@ -131,7 +131,7 @@ fn add_wood_cutter_on_click(
         if let Some((tile, children)) = tile_q.iter().last() {
             if let Some(children) = children {
                 for &possible_wood_cutter in children.iter() {
-                    if let Ok(_) = existing_wood_cutters_q.get(possible_wood_cutter) {
+                    if existing_wood_cutters_q.get(possible_wood_cutter).is_ok() {
                         // The child is in our list of existing wood cutters so we want to
                         // despawn it
                         commands

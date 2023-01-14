@@ -57,7 +57,7 @@ pub fn create_map(mut commands: Commands, tile_image: Res<TileHandleHex>) {
         let stagger = if j % 2 == 0 { 0.0 } else { delta.x / 2.0 };
         let translation = Vec3::new(i as f32 * delta.x + stagger, j as f32 * delta.y, 1.0);
         let _tile_transform = Transform {
-            translation: translation,
+            translation,
             ..Default::default()
         };
 
