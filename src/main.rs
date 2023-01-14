@@ -4,9 +4,10 @@ use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
 
 mod map;
-use map::map::{
-    create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover,
-};
+use map::map::{create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover};
+
+mod resources;
+use resources::resources::{ItemType, PlayerResources};
 
 #[derive(Deref, Resource)]
 pub struct FontHandle(Handle<Font>);
@@ -29,8 +30,61 @@ impl FromWorld for AxeHandle {
 #[derive(Component, Inspectable)]
 pub struct Building;
 
+/// Productions parameters common to anything that produces items
+#[derive(Component, Inspectable)]
+struct Producer {
+    /// Current number of turns until we next produce
+    turns_remaining: u32,
+    /// This is how many units are produced in each batch
+    number_produced: u32,
+    /// This is how many turns it takes to produce a batch
+    production_turns: u32,
+    /// The type of item produced
+    produces_item_type: ItemType,
+}
+
+impl Producer {
+    /// Try to produce items.
+    pub fn produce(&mut self, player_resources: &mut PlayerResources) {
+        if self.turns_remaining == 1 {
+            // Add a batch of resources to the player's inventory
+            player_resources.add_item(&self.produces_item_type, self.number_produced);
+            // Reset the turn counter
+            self.turns_remaining = self.production_turns;
+        } else {
+            self.turns_remaining -= 1;
+        }
+    }
+}
+
 #[derive(Component)]
 pub struct WoodCutter;
+
+#[derive(Resource)]
+pub enum SelectedAction {
+    DemolishBuilding,
+    BuildWoodCutter,
+}
+
+impl Default for SelectedAction {
+    fn default() -> Self {
+        SelectedAction::BuildWoodCutter
+    }
+}
+
+/// For all producers, make stuff!
+fn produce_items_for_a_turn(
+    mut resources: ResMut<PlayerResources>,
+    mut producers: Query<&mut Producer>,
+    key: Res<Input<KeyCode>>,
+) {
+    if key.just_pressed(KeyCode::Space) {
+        for mut p in producers.iter_mut() {
+            p.produce(&mut *resources);
+        }
+    println!("Current Player Resources: {:?}", resources);
+    }
+}
 
 fn add_wood_cutter_on_click(
     mut commands: Commands,
@@ -58,6 +112,7 @@ fn add_wood_cutter_on_click(
                     let wood_cutter_id = commands
                         .spawn((
                             WoodCutter,
+                            Producer { turns_remaining: 1, number_produced: 1, production_turns: 1, produces_item_type: ItemType::Wood },
                             SpriteBundle {
                                 texture: axe_handle.clone(),
                                 transform: transform,
@@ -136,11 +191,14 @@ fn main() {
         .init_resource::<TileHandleHex>()
         .init_resource::<FontHandle>()
         .init_resource::<AxeHandle>()
+        .init_resource::<SelectedAction>()
+        .init_resource::<PlayerResources>()
         .add_startup_system(setup_camera)
         .add_startup_system(create_map)
         .add_startup_system(setup_menu)
         .add_system_to_stage(CoreStage::First, camera_movement)
         .add_system(add_wood_cutter_on_click)
         .add_system(hover_on_tile)
+        .add_system(produce_items_for_a_turn)
         .run();
 }
