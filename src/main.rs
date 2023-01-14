@@ -4,10 +4,10 @@ use bevy_inspector_egui::{Inspectable, WorldInspectorPlugin};
 use helpers::camera::movement as camera_movement;
 
 mod map;
-use map::map::{create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover};
+use map::{create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHover};
 
 mod resources;
-use resources::resources::{ItemType, PlayerResources};
+use resources::{ItemType, PlayerResources};
 
 #[derive(Deref, Resource)]
 pub struct FontHandle(Handle<Font>);
@@ -128,17 +128,15 @@ fn add_wood_cutter_on_click(
     }
     if buttons.just_pressed(MouseButton::Right) {
         // Right mouse will destroy the wood cutter
-        if let Some((tile, children)) = tile_q.iter().last() {
-            if let Some(children) = children {
-                for &possible_wood_cutter in children.iter() {
-                    if existing_wood_cutters_q.get(possible_wood_cutter).is_ok() {
-                        // The child is in our list of existing wood cutters so we want to
-                        // despawn it
-                        commands
-                            .entity(tile)
-                            .remove_children(&[possible_wood_cutter]);
-                        commands.entity(possible_wood_cutter).despawn();
-                    }
+        if let Some((tile, Some(children))) = tile_q.iter().last() {
+            for &possible_wood_cutter in children.iter() {
+                if existing_wood_cutters_q.get(possible_wood_cutter).is_ok() {
+                    // The child is in our list of existing wood cutters so we want to
+                    // despawn it
+                    commands
+                        .entity(tile)
+                        .remove_children(&[possible_wood_cutter]);
+                    commands.entity(possible_wood_cutter).despawn();
                 }
             }
         }
