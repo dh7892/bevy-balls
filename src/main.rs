@@ -9,6 +9,11 @@ use map::{create_map, hover_on_tile, HoveredTile, TileHandleHex, TileHandleHexHo
 mod resources;
 use resources::{ItemType, PlayerResources};
 
+#[derive(Resource, Default, Debug)]
+pub struct TurnCounter {
+    turn: u32,
+}
+
 #[derive(Deref, Resource)]
 pub struct FontHandle(Handle<Font>);
 impl FromWorld for FontHandle {
@@ -77,12 +82,14 @@ fn produce_items_for_a_turn(
     mut resources: ResMut<PlayerResources>,
     mut producers: Query<&mut Producer>,
     key: Res<Input<KeyCode>>,
+    mut turn_counter: ResMut<TurnCounter>,
 ) {
     if key.just_pressed(KeyCode::Space) {
         for mut p in producers.iter_mut() {
             p.produce(&mut resources);
         }
-        println!("Current Player Resources: {resources:?}");
+        turn_counter.turn +=1;
+        println!("Current Player Resources: {resources:?}, current turn now: {turn_counter:?}");
     }
 }
 
@@ -191,6 +198,7 @@ fn main() {
         .init_resource::<AxeHandle>()
         .init_resource::<SelectedAction>()
         .init_resource::<PlayerResources>()
+        .init_resource::<TurnCounter>()
         .add_startup_system(setup_camera)
         .add_startup_system(create_map)
         .add_startup_system(setup_menu)
